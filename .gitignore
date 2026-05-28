@@ -1,5 +1,6 @@
 .env
 ntfy-access-token.txt
+heard.json
 .claude/
 .vscode/
 __pycache__/
