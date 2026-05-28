@@ -3,7 +3,6 @@ from urllib.parse import urlparse
 
 FEED_URL = 'https://rss.samharris.org/feed/5b624f14-e923-4a75-aeb9-77d11773fb91'
 HEARD_FILE = os.path.join(os.path.dirname(__file__), 'heard.json')
-NTFY_EMAIL = 'followcrom@gmail.com'
 
 ENV_FILE = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(ENV_FILE):
@@ -22,6 +21,10 @@ NTFY_TOPIC = os.environ.get('NTFY_TOPIC')
 if not NTFY_TOPIC:
     sys.exit('NTFY_TOPIC not set (env var or .env)')
 NTFY_URL = f'https://ntfy.sh/{NTFY_TOPIC}'
+
+NTFY_EMAIL = os.environ.get('NTFY_EMAIL')
+if not NTFY_EMAIL:
+    sys.exit('NTFY_EMAIL not set (env var or .env)')
 
 feed = feedparser.parse(FEED_URL)
 
