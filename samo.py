@@ -11,6 +11,8 @@ if os.path.exists(ENV_FILE):
                 k, v = line.split('=', 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
+# The above allows us to set env vars in a .env file, but they can also be set in the environment directly. This is useful for CI or if you don't want to store secrets in a file.
+
 FEED_URL = os.environ.get('FEED_URL')
 if not FEED_URL:
     sys.exit('FEED_URL not set (env var or .env)')
