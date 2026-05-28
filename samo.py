@@ -1,7 +1,5 @@
 import feedparser, requests, os, json, sys
-from urllib.parse import urlparse
 
-FEED_URL = 'https://rss.samharris.org/feed/5b624f14-e923-4a75-aeb9-77d11773fb91'
 HEARD_FILE = os.path.join(os.path.dirname(__file__), 'heard.json')
 
 ENV_FILE = os.path.join(os.path.dirname(__file__), '.env')
@@ -12,6 +10,10 @@ if os.path.exists(ENV_FILE):
             if line and not line.startswith('#') and '=' in line:
                 k, v = line.split('=', 1)
                 os.environ.setdefault(k.strip(), v.strip())
+
+FEED_URL = os.environ.get('FEED_URL')
+if not FEED_URL:
+    sys.exit('FEED_URL not set (env var or .env)')
 
 NTFY_TOKEN = os.environ.get('NTFY_TOKEN')
 if not NTFY_TOKEN:
