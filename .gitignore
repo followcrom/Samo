@@ -1,0 +1,5 @@
+.env
+ntfy-access-token.txt
+.claude/
+.vscode/
+__pycache__/
