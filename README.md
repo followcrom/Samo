@@ -53,10 +53,14 @@ processed messages. You normally never touch the mailbox by hand.
 
    ```
    FEED_URL=https://rss.samharris.org/feed/<your-feed-id>
-   NTFY_TOKEN=tk_your_ntfy_access_token
-   NTFY_TOPIC=your-ntfy-topic
-   NTFY_EMAIL=you@example.com
+   SAMO_NTFY_TOKEN=tk_your_ntfy_access_token
+   SAMO_NTFY_TOPIC=your-ntfy-topic
+   SAMO_NTFY_EMAIL=you@example.com
    ```
+
+   The ntfy keys are `SAMO_`-prefixed so they never collide with the `NTFY_*`
+   variables the ntfy CLI injects when running Samo as a trigger hook (see
+   *Triggering a run on demand*).
 
    Optionally override the mark-heard address and mailbox (defaults shown):
 
@@ -98,15 +102,36 @@ the requirements are:
   useradd -r -s /usr/sbin/nologin samheard
   ```
 
+- **Correct mbox ownership** — Postfix's `local` agent delivers **as the
+  `samheard` user**, so `/var/mail/samheard` must be owned by `samheard` (group
+  `mail`). If it's owned by anyone else, delivery bounces with
+  *"cannot update mailbox /var/mail/samheard ... Permission denied"* and every
+  mark-heard mail is lost. The classic way to get into this state is creating or
+  truncating the file as root **before it exists** (e.g. `: > /var/mail/samheard`),
+  which leaves it `root:mail`. Fix it with:
+
+  ```bash
+  chown samheard:mail /var/mail/samheard
+  chmod 660 /var/mail/samheard
+  ```
+
+  Because the cron runs as **root**, the `mailbox` rewrite during ingestion would
+  normally flip the file back to `root:root`; `samo.py` guards against this by
+  restoring the pre-run owner/mode after it removes messages.
+
 Test that delivery works:
 
 ```bash
 printf 'Subject: heard testping\n\ntest\n' | sendmail -i samheard@followcrom.com
 sleep 2
 tail -n 3 /var/log/mail.log        # expect: status=sent (delivered to mailbox)
-ls -l /var/mail/samheard           # the mbox should now exist
-: > /var/mail/samheard             # clear the throwaway test message
+ls -l /var/mail/samheard           # the mbox should now exist, owned samheard:mail
+truncate -s0 /var/mail/samheard    # clear the throwaway test message (preserves owner)
 ```
+
+> Use `truncate -s0` (not `: >`) to clear the mbox: it empties the existing file
+> in place and keeps its ownership. `: >` is only dangerous when the file doesn't
+> yet exist, since the redirect then *creates* it as root.
 
 ### Reading the samheard mailbox
 
@@ -148,3 +173,63 @@ root, so its files are never exposed over HTTP.
 
 Cron uses the VM's local time — check with `timedatectl` and set the timezone
 (`timedatectl set-timezone Europe/London`) if the box defaults to UTC.
+
+Two runs can't clobber each other: on startup `samo.py` takes a non-blocking
+lock on `.samo.lock`, so if a second instance starts while one is running (e.g.
+an on-demand trigger overlapping the cron) it exits cleanly instead of racing on
+`heard.json` and the mbox.
+
+### Triggering a run on demand
+
+The weekly cron is the baseline, but you often hear about a new episode sooner
+(Sam's mailing list, etc.) and don't want to wait until Sunday. Samo can be
+poked to run immediately via [ntfy](https://ntfy.sh) — the same service it
+already uses to notify you, just in the other direction.
+
+The idea: the box **subscribes** to a private ntfy topic and runs `samo.py`
+whenever a message arrives on it. You trigger a run by publishing to that topic
+(tap send in the ntfy app, or `curl`), from wherever you are.
+
+1. **Pick a private topic** — a long, random name, separate from `NTFY_TOPIC`.
+   On free ntfy.sh the topic name is the only secret, so treat it like a
+   password and keep it out of git:
+
+   ```bash
+   echo "samrun-$(openssl rand -hex 8)"
+   ```
+
+   Subscribe to that topic in the ntfy phone app so you can publish to it.
+
+2. **Install the ntfy CLI on the box** — the script talks to ntfy over plain
+   HTTP, so the box doesn't have the `ntfy` program yet. Either add the
+   [apt repo](https://docs.ntfy.sh/install/) or drop in the single binary from
+   the [releases](https://github.com/binwiederhier/ntfy/releases) under
+   `/usr/local/bin/ntfy`. Confirm with `ntfy --version`.
+
+3. **Install the systemd service** — copy `samo-trigger.service` to
+   `/etc/systemd/system/`, replacing `samrun-REPLACE_WITH_YOUR_TOPIC` with your
+   topic and checking the `ntfy` path matches `which ntfy`:
+
+   ```bash
+   cp samo-trigger.service /etc/systemd/system/
+   # edit the topic + path, then:
+   systemctl daemon-reload
+   systemctl enable --now samo-trigger.service
+   systemctl status samo-trigger.service        # expect: active (running)
+   ```
+
+   It runs as **root** (Samo needs `/opt/samo` and the mailbox) and restarts
+   itself on crash, network blips, or reboot.
+
+   > **Keep the trigger topic distinct from `SAMO_NTFY_TOPIC`.** When ntfy runs
+   > the command it injects the triggering message's topic as `$NTFY_TOPIC`.
+   > Samo's own config keys are `SAMO_`-prefixed precisely so this injected
+   > variable can't be mistaken for Samo's publish topic — otherwise Samo would
+   > publish into the trigger topic, which the subscriber would re-trigger,
+   > looping until ntfy returns `429 Too Many Requests`. Still, give the two
+   > topics different names so a run never re-triggers itself.
+
+4. **Trigger it** — publish to the topic from the ntfy app (or
+   `curl -d "go" https://ntfy.sh/samrun-<your-topic>`). Watch it with
+   `journalctl -u samo-trigger.service -f`. With nothing new in the feed you'll
+   get the *"All quiet from Sam"* heartbeat, confirming the chain works.

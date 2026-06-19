@@ -1,0 +1,20 @@
+[Unit]
+# On-demand trigger for Samo: subscribes to a private ntfy topic and runs the
+# script whenever a message lands there, so you can poke it from the ntfy app
+# instead of waiting for the weekly cron. See README "Triggering a run on demand".
+Description=Run Samo when a trigger lands on its ntfy topic
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Replace samrun-REPLACE_WITH_YOUR_TOPIC with your own long, random topic name.
+# On free ntfy.sh the topic name is the only secret, so keep it out of git and
+# treat it like a password. Runs as root (no User=) because Samo needs access to
+# /opt/samo and the samheard mailbox. Keep this trigger topic distinct from
+# SAMO_NTFY_TOPIC (where Samo publishes), or a run would re-trigger itself.
+ExecStart=/usr/local/bin/ntfy subscribe samrun-REPLACE_WITH_YOUR_TOPIC "/opt/samo/samo_venv/bin/python /opt/samo/samo.py >> /opt/samo/samo.log 2>&1"
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

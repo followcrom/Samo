@@ -1,4 +1,4 @@
-import feedparser, requests, os, json, sys, re, mailbox
+import feedparser, requests, os, json, sys, re, mailbox, fcntl
 
 STATE_FILE = os.path.join(os.path.dirname(__file__), 'heard.json')
 
@@ -18,18 +18,22 @@ FEED_URL = os.environ.get('FEED_URL')
 if not FEED_URL:
     sys.exit('FEED_URL not set (env var or .env)')
 
-NTFY_TOKEN = os.environ.get('NTFY_TOKEN')
+# Config keys are SAMO_-prefixed so they never collide with the NTFY_* variables
+# the ntfy CLI injects into our environment when it runs us as a subscribe hook.
+# Without the prefix, ntfy's injected NTFY_TOPIC (the trigger topic) would win
+# over .env here and Samo would publish into its own trigger topic — a loop.
+NTFY_TOKEN = os.environ.get('SAMO_NTFY_TOKEN')
 if not NTFY_TOKEN:
-    sys.exit('NTFY_TOKEN not set (env var or .env)')
+    sys.exit('SAMO_NTFY_TOKEN not set (env var or .env)')
 
-NTFY_TOPIC = os.environ.get('NTFY_TOPIC')
+NTFY_TOPIC = os.environ.get('SAMO_NTFY_TOPIC')
 if not NTFY_TOPIC:
-    sys.exit('NTFY_TOPIC not set (env var or .env)')
+    sys.exit('SAMO_NTFY_TOPIC not set (env var or .env)')
 NTFY_URL = f'https://ntfy.sh/{NTFY_TOPIC}'
 
-NTFY_EMAIL = os.environ.get('NTFY_EMAIL')
+NTFY_EMAIL = os.environ.get('SAMO_NTFY_EMAIL')
 if not NTFY_EMAIL:
-    sys.exit('NTFY_EMAIL not set (env var or .env)')
+    sys.exit('SAMO_NTFY_EMAIL not set (env var or .env)')
 
 # Address you email to mark an episode heard, and the local mbox where Postfix
 # delivers it. Both default to the dedicated samheard mailbox on the VM.
@@ -71,6 +75,7 @@ def collect_marked_heard(known_ids):
     if not os.path.exists(HEARD_MAILBOX):
         return marked
     try:
+        st = os.stat(HEARD_MAILBOX)
         box = mailbox.mbox(HEARD_MAILBOX)
         box.lock()
         try:
@@ -83,10 +88,33 @@ def collect_marked_heard(known_ids):
         finally:
             box.unlock()
             box.close()
+        # When we remove messages, mailbox.flush() rewrites the spool via a
+        # temp file + rename, so the file inherits *this* process's owner. Run
+        # from root's cron that turns it into root:root, after which Postfix
+        # (which delivers as the samheard user) can no longer write it and all
+        # future mark-heard mail bounces. Restore the pre-run owner/mode.
+        if marked:
+            try:
+                os.chown(HEARD_MAILBOX, st.st_uid, st.st_gid)
+                os.chmod(HEARD_MAILBOX, st.st_mode & 0o777)
+            except OSError as e:
+                print(f'could not restore ownership of {HEARD_MAILBOX}: {e}',
+                      file=sys.stderr)
     except Exception as e:
         print(f'could not read mailbox {HEARD_MAILBOX}: {e}', file=sys.stderr)
     return marked
 
+
+# Single-instance lock: the weekly cron and a mail-triggered run could fire at
+# once, and two instances would race on heard.json and the mbox. Take a
+# non-blocking lock; if another run holds it, bow out quietly. _lock_fh is kept
+# open for the process lifetime so the lock is held until we exit.
+LOCK_FILE = os.path.join(os.path.dirname(__file__), '.samo.lock')
+_lock_fh = open(LOCK_FILE, 'w')
+try:
+    fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except OSError:
+    sys.exit('another samo run is in progress; exiting')
 
 feed = feedparser.parse(FEED_URL)
 

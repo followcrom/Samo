@@ -4,3 +4,4 @@ heard.json
 .claude/
 .vscode/
 __pycache__/
+.samo.lock
