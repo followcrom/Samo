@@ -5,3 +5,4 @@ heard.json
 .vscode/
 __pycache__/
 .samo.lock
+samo-trigger.service
