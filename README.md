@@ -10,15 +10,11 @@
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/followcrom/Samo)
 ![GitHub repo size](https://img.shields.io/github/repo-size/followcrom/Samo)
 
-Polls the [Making Sense](https://www.samharris.org/podcasts/making-sense) podcast
-RSS feed and sends an [ntfy](https://ntfy.sh) push notification for each new
+Polls the podcast RSS feed and sends an ntfy push notification for each new
 episode. Runs unattended as a weekly cron job, and you can poke it on demand —
 check for new episodes, or recall recent ones — straight from the ntfy app.
 
 ## How it works
-
-Samo tracks one set of episode IDs in `heard.json`: **`notified`** — the
-episodes it has already pushed a notification for. On each run it:
 
 1. Reads the feed and extracts each episode's audio enclosure.
 2. Pushes a notification per **un-notified** episode (title + download link) and
@@ -31,42 +27,9 @@ Each episode is notified exactly once. To deliberately re-surface a recent
 episode — e.g. a push you missed or dismissed — use **Recall** (see *Using Samo
 from your phone*).
 
-`heard.json` is per-environment state and is **not** tracked in git, so each
-machine keeps its own record. (The filename is historical — it once also tracked
+The filename `heard.json` is historical — it once also tracked
 a `heard` set; that's gone, and an older `{"notified": [...], "heard": [...]}`
-file is read fine, with the `heard` key ignored.)
-
-## Setup
-
-1. Install dependencies (Python 3, in a virtualenv):
-
-   ```bash
-   pip install feedparser requests
-   ```
-
-2. Create a `.env` file (gitignored) with:
-
-   ```
-   FEED_URL=https://rss.samharris.org/feed/<your-feed-id>
-   SAMO_NTFY_TOKEN=tk_your_ntfy_access_token
-   SAMO_NTFY_TOPIC=your-ntfy-topic
-   ```
-
-   The ntfy keys are `SAMO_`-prefixed so they never collide with the `NTFY_*`
-   variables the ntfy CLI injects when running Samo as a trigger hook (see
-   *Deployment → On-demand triggers*).
-
-   Shell/cron environment variables override values in `.env` if both are set.
-
-3. Create `heard.json` (gitignored) to start tracking. An empty list means
-   every current episode counts as new and will be notified on the first run:
-
-   ```json
-   []
-   ```
-
-   To avoid a flood of notifications on a new machine, copy an existing
-   `heard.json` over instead.
+file is read fine, with the `heard` key ignored.
 
 ## Using Samo from your phone
 

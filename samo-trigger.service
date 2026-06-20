@@ -9,9 +9,9 @@ Wants=network-online.target
 [Service]
 # Replace samrun-REPLACE_WITH_YOUR_TOPIC with your own long, random topic name.
 # On free ntfy.sh the topic name is the only secret, so keep it out of git and
-# treat it like a password. Runs as root (no User=) because Samo needs access to
-# /opt/samo and the samheard mailbox. Keep this trigger topic distinct from
-# SAMO_NTFY_TOPIC (where Samo publishes), or a run would re-trigger itself.
+# treat it like a password. Runs as root (no User=) because Samo lives in
+# root-owned /opt/samo. Keep this trigger topic distinct from SAMO_NTFY_TOPIC
+# (where Samo publishes), or a run would re-trigger itself.
 ExecStart=/usr/local/bin/ntfy subscribe samrun-REPLACE_WITH_YOUR_TOPIC "/opt/samo/samo_venv/bin/python /opt/samo/samo.py >> /opt/samo/samo.log 2>&1"
 Restart=always
 RestartSec=10
