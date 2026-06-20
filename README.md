@@ -1,7 +1,7 @@
 # Samo
 
 <div align="center">
-  <img src="imgs/making_sense_blue-1024x1024.jpg" alt="Making Sense Icon" width="225" height="225" />
+  <img src="https://github.com/followcrom/Samo/blob/main/imgs/making_sense_blue-1024x1024.png" alt="Making Sense Icon" width="225" height="225" />
 </div>
 
 ## 📅 Commit Activity 🕹️
